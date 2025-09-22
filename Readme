@@ -1,107 +1,189 @@
-# 大模型 Token 计算器设计方案
+# 大模型 Token 计算器
 
-## 1. 项目目标
-- 为用户提供一个简单、快速的方式来估算文本在不同大模型下的 token 数量。
-- 支持 OpenAI GPT 系列（gpt-3.5、gpt-4、gpt-4o 等）、阿里 Qwen 系列、DeepSeek 系列等常见模型。
-- 支持根据模型不同的上下文长度限制给出超限提醒，并预估费用（若有价格信息）。
+一个用于估算不同大语言模型 Token 占用情况的轻量级后端服务与命令行工具。核心逻辑仅依赖 Python 标准库，额外提供了基于 Hugging Face 仓库的分词能力，方便直接复用官方 tokenizer 进行真实计数。
 
-## 2. 核心需求与功能列表
-1. **文本输入**：支持多语言长文本粘贴，实时统计字符数、行数。
-2. **模型选择**：
-   - 预置模型列表（按厂商分组），提供搜索/收藏功能。
-   - 显示模型上下文长度、token 价格等元信息。
-3. **Token 计算**：
-   - 根据所选模型对应的分词器计算 token 数。
-   - 对于不在列表内的模型允许用户选择相近的分词规则或上传自定义 vocab。
-4. **结果展示**：
-   - 展示 token 数、已用上下文百分比、估算费用。
-   - 若超出上下文长度，给出拆分建议或提示。
-5. **历史记录与导出**：允许用户保存、导出计算结果。
-6. **开发者模式**：提供 API，支持第三方调用。
+---
 
-## 3. Tokenizer 设计
-| 模型系列 | 分词器方案 | 说明 |
-| --- | --- | --- |
-| GPT 系列 | 使用 [tiktoken](https://github.com/openai/tiktoken) 或 OpenAI 提供的官方编码器。 | 需要预先下载模型对应的 encoding（如 `cl100k_base` 等）。 |
-| DeepSeek 系列 | 使用官方开源的 BPE vocab（可通过 `sentencepiece` 或 `tokenizers` 加载）。 | DeepSeek 官方仓库提供 `tokenizer.model`，可用 `sentencepiece` 解码。 |
-| Qwen 系列 | 使用阿里提供的 tiktoken 兼容版或开源的 `tiktoken_qwen`。 | 需根据模型版本选择对应词表。 |
-| 自定义模型 | 支持上传 BPE/ sentencepiece 词表，使用 HuggingFace `tokenizers` 动态加载。 | 允许用户选择分词模式（BPE、Unigram、WordPiece 等）。 |
+## 🚀 快速开始
 
-> **实现建议**：将 tokenizer 抽象为统一接口 `TokenizerAdapter`，封装 `encode(text) -> tokens` 与 `decode(tokens)`。
+### 1. 准备运行环境
+- 需要 Python 3.10 及以上版本（项目在 Python 3.12 下通过测试）。
+- 核心模块依赖 Python 标准库；若需使用 Hugging Face 分词器，请额外安装 [`tokenizers`](https://pypi.org/project/tokenizers/)（可选：`huggingface-hub` 用于更丰富的下载策略）。
 
-## 4. 系统架构
-```
-┌──────────────────────────────────────────────────────┐
-│                      前端 Web                        │
-│ ┌─────────────┐ ┌─────────────┐ ┌──────────────────┐ │
-│ │ 文本输入区   │ │ 模型选择面板 │ │ 结果展示/历史区    │ │
-│ └─────────────┘ └─────────────┘ └──────────────────┘ │
-└────────────┬────────────────────────────────────────┘
-             │HTTPS/REST + WebSocket (用于实时反馈)
-┌────────────┴────────────────────────────────────────┐
-│                      后端服务                        │
-│ ┌──────────────────────────────────────────────────┐ │
-│ │ Tokenizer Service                                │ │
-│ │  - 统一适配层                                     │ │
-│ │  - 模型元信息缓存/加载                             │ │
-│ ├──────────────────────────────────────────────────┤ │
-│ │ Metadata Service                                  │ │
-│ │  - 模型配置（上下文长度、价格）                    │ │
-│ │  - 更新任务（定时同步官网/开源项目数据）           │ │
-│ ├──────────────────────────────────────────────────┤ │
-│ │ API Gateway / GraphQL 层                          │ │
-│ └──────────────────────────────────────────────────┘ │
-│               ↕                                    ↕  │
-│         Redis/Memcached (缓存)      PostgreSQL/SQLite │
-└──────────────────────────────────────────────────────┘
+建议使用虚拟环境隔离运行环境：
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows 下使用 .venv\Scripts\activate
 ```
 
-## 5. 前端设计要点
-- **技术栈**：React + TypeScript + TailwindCSS，或使用 Vue + Element Plus。
-- **实时反馈**：文本输入触发 debounced 请求（例如 300ms）到后端获取 token 数；对于短文本可直接在前端本地计算（加载 wasm/tokenizer）。
-- **模型列表**：支持分组折叠、搜索、收藏、最近使用。
-- **辅助功能**：
-  - 一键复制 token 结果。
-  - 粘贴 Markdown/代码自动保留格式。
-  - 支持黑暗模式。
+### 2. 运行自动化测试
+项目附带了覆盖 CLI、服务层、HTTP 接口与分词器的单元/集成测试。顶层的 `tests/conftest.py` 会自动将仓库根目录加入 `sys.path`，因此只需在仓库根目录执行：
+```bash
+pytest
+```
 
-## 6. 后端设计要点
-- **技术栈**：Python（FastAPI）或 Node.js（NestJS）。
-- **Tokenizer Adapter**：
-  - 抽象类定义 `name`, `max_context`, `calculate_tokens(text)`。
-  - 针对不同模型加载对应词表，考虑热加载与缓存。
-- **性能优化**：
-  - 长文本使用异步任务，返回任务 ID，完成后推送结果。
-  - 常用模型词表缓存到内存，减少磁盘读取。
-- **可扩展性**：
-  - Model Metadata 存储配置项（上下文长度、默认价格、发布信息等）。
-  - 新增模型只需更新配置与词表即可。
+执行成功后会看到所有测试用例通过，确保核心逻辑可以正确运行。
 
-## 7. Token 计算流程
-1. 用户粘贴文本并选择模型。
-2. 前端发送 `POST /api/tokenize`，包含文本、模型标识。
-3. 后端根据模型标识加载对应 Tokenizer Adapter。
-4. 调用 `adapter.encode(text)` 返回 token 序列。
-5. 计算 token 数、上下文占比、费用估算，响应给前端。
-6. 记录请求日志（匿名化）用于使用统计。
+---
 
-## 8. 扩展与增值功能
-- **批量模式**：上传文件（txt、md、docx），按段落或文件进行统计。
-- **Prompt 模版库**：结合常见 Prompt 模板计算 token 使用量。
-- **团队协作**：成员共享历史记录、设置统一计费标准。
-- **浏览器插件/VSCode 插件**：直接在编辑器中获取 token 数。
+## 🛠 使用说明
 
-## 9. 安全与隐私
-- 对用户粘贴文本进行本地加密传输，后端默认不持久化原始文本。
-- 提供本地部署模式，确保敏感数据不出内网。
+### 命令行工具
+命令行入口位于 `app/__main__.py`，使用 `python -m app.__main__` 调用：
 
-## 10. 部署方案
-- 使用 Docker Compose 部署（web、api、redis、db）。
-- 支持云服务（Vercel/Netlify + Render/Fly.io）或企业内网 Kubernetes。
+1. 查看支持的模型列表：
+   ```bash
+   python -m app.__main__ models
+   ```
+2. 统计文本 Token 数量：
+   ```bash
+   python -m app.__main__ count \
+       --model gpt-4o-mini \
+       --text "Hello world"
+   ```
+3. 从文件读取内容进行统计：
+   ```bash
+   python -m app.__main__ count \
+       --model qwen-2-7b \
+       --file ./sample.txt
+   ```
+4. 使用自定义模型注册表：
+   ```bash
+   python -m app.__main__ --registry ./custom_models.json models
+   ```
 
-## 11. 迭代路线图
-1. **MVP**：支持 GPT/DeepSeek/Qwen 三大系列核心模型的 token 计算，前端实时展示。
-2. **增强版**：加入费用估算、历史记录、批量导入。
-3. **专业版**：提供团队协作、API 接口、插件生态。
+命令返回的均为 JSON 结构，便于与其他工具或脚本集成。
 
+### HTTP 服务
+执行以下命令可启动一个提供简单前端页面与 REST API 的本地服务：
+```bash
+python -m app.__main__ serve --host 0.0.0.0 --port 8000
+```
 
+服务端公开的接口：
+- `GET /` 或 `GET /index.html`：返回内嵌的演示页面，可直接在浏览器中粘贴文本并查看 Token 统计结果。
+- `GET /models`：返回所有可用模型的元信息列表。
+- `POST /tokenize`：根据请求体中的 `model` 和 `text` 字段计算 Token 统计信息。
+
+请求示例：
+```bash
+curl -X POST http://127.0.0.1:8000/tokenize \
+     -H "Content-Type: application/json" \
+     -d '{"model": "deepseek-chat", "text": "你好，世界！"}'
+```
+
+返回示例（部分字段）：
+```json
+{
+  "model": {
+    "id": "deepseek-chat",
+    "display_name": "DeepSeek-Chat",
+    "max_context": 65536,
+    ...
+  },
+  "token_count": 12,
+  "tokens": ["你", "好", "，", "世界", "！"],
+  "usage_ratio": 0.00018,
+  "pricing": null
+}
+```
+
+### Hugging Face 分词器
+
+`deepseek-chat` 与 `qwen-2-7b` 使用 `HuggingFaceTokenizer`，可直接从官方 Hugging Face 仓库拉取对应的 `tokenizer.json` 文件完成分词：
+
+- **配置项**（位于 `app/resources/model_registry.json` 的 `tokenizer.options` 字段）
+  - `repo_id`：目标仓库，如 `deepseek-ai/DeepSeek-V3`。
+  - `revision`：分支或 Tag，默认 `main`。
+  - `tokenizer_file`：仓库内的 tokenizer 文件名，通常为 `tokenizer.json`。
+  - `add_special_tokens`：是否在计数时自动补充 BOS/EOS 等特殊符号。
+  - `cache_dir` / `local_tokenizer_path` / `local_files_only`：控制缓存目录、直接使用本地文件或仅允许离线读取。
+- **缓存策略**：首次使用时会访问 `https://huggingface.co/<repo_id>/resolve/<revision>/<tokenizer_file>` 并缓存到 `~/.cache/token-counter-llm/<repo>/<revision>/`，随后重复调用不会再次下载。
+- **离线环境**：可提前将 `tokenizer.json` 下载至本地，然后在模型配置中填写 `local_tokenizer_path`，或将文件放入缓存目录后设置 `local_files_only: true`。
+- **依赖提示**：加载 `tokenizer.json` 需要 `tokenizers` 库；若未安装，会在运行时提示安装步骤。
+
+---
+
+## 📁 目录结构
+```
+app/
+├── __main__.py           # 命令行入口
+├── server.py             # 内置 HTTP 服务（包含演示前端）
+├── config.py             # 模型注册表解析逻辑
+├── models.py             # 元数据 dataclass 定义
+├── services/
+│   └── token_service.py  # 业务服务层（核心计算逻辑）
+├── tokenizers/
+│   ├── base.py                 # TokenizerAdapter 抽象基类
+│   ├── registry.py             # 分词器注册表与工厂
+│   ├── regex_tokenizer.py      # 基于正则的分词器实现
+│   ├── simple_byte_tokenizer.py# UTF-8 字节级分词器
+│   └── huggingface_tokenizer.py# 拉取 Hugging Face 仓库的分词器
+└── resources/
+    └── model_registry.json # 预置的模型/分词器配置
+```
+
+---
+
+## 🧠 核心实现原理
+
+### 1. 模型注册与配置解析 (`app/config.py`)
+- 默认读取 `app/resources/model_registry.json`，也可通过 CLI/服务端传入自定义路径。
+- 每个模型配置包含 `id`、`display_name`、`family`、`provider`、`max_context`、`tokenizer`、`pricing` 等字段。
+- `TokenizerSpec` 与 `Pricing` 使用 `dataclass` 封装，便于后续序列化与业务逻辑使用。
+
+### 2. 分词器注册表 (`app/tokenizers/registry.py`)
+- 提供 `TokenizerRegistry.get_tokenizer()` 工厂方法，根据 `TokenizerSpec` 构造具体分词器实例，并支持缓存复用。
+- 当前内置三种分词器：
+  - `RegexTokenizer`：可配置是否保留空白、大小写归一化、正则模式等，适用于模拟 BPE/词法分割。
+  - `ByteTokenizer`：按 UTF-8 字节切分，适合模拟字节级上下文限制模型。
+  - `HuggingFaceTokenizer`：按需下载 Hugging Face 仓库的 `tokenizer.json` 并通过 `tokenizers` 库完成编码。
+- 通过 `get_tokenizer_for_model(model, registry)` 快速根据模型元数据获取分词器。
+
+### 3. 业务服务层 (`app/services/token_service.py`)
+- `TokenService` 持有模型字典与 `TokenizerRegistry`。
+- `calculate(model_id, text)` 会：
+  1. 校验模型是否存在。
+  2. 调用对应分词器获得 Token 序列。
+  3. 统计 Token 数量、计算上下文使用比例与超限数量。
+  4. 若配置了价格信息，估算输入 Token 成本。
+- 返回结果统一为字典结构，包含模型详情、Token 列表、占用比例、费用估算等字段。
+
+### 4. HTTP 层 (`app/server.py`)
+- 使用标准库 `http.server` 实现，未引入第三方框架。
+- 提供极简的单页前端（嵌入 HTML/CSS/JS）实现即时交互体验。
+- 所有响应均为 UTF-8 编码，覆盖基本的错误处理（如未知模型、非法 JSON 等）。
+
+### 5. 命令行入口 (`app/__main__.py`)
+- 基于 `argparse`，提供 `models`、`count`、`serve` 三个子命令。
+- 支持通过 `--registry` 切换模型配置文件，实现多套模型列表共存。
+
+---
+
+## 🔧 扩展指南
+
+1. **新增模型**
+   - 在 `app/resources/model_registry.json` 中添加一条模型记录。
+   - 指定 `tokenizer.type` 为 `regex`、`byte` 或 `huggingface`，并根据需要填写 `options`（如正则参数、Hugging Face 仓库地址等）。
+   - 可选地添加 `pricing` 字段用于费用估算。
+
+2. **新增分词器实现**
+   - 在 `app/tokenizers/` 目录中新建模块，实现 `TokenizerAdapter` 抽象类。
+   - 在 `TokenizerRegistry._create_tokenizer` 中注册新的 `type` 分支。
+   - 在模型配置中引用新的 `type` 即可生效。
+
+3. **接入真实分词库**
+   - 可在分词器实现中引入第三方库（如 `tiktoken`、`tokenizers` 或 `sentencepiece`），并在 README 的“运行环境”小节中补充安装指引。
+   - 若需要异步处理或批量计算，可将 `TokenService` 封装在 FastAPI、Flask 等框架中拓展。
+
+---
+
+## 🧪 开发建议
+- 修改或新增功能后，请运行 `pytest` 确认所有测试通过。
+- 若调整模型配置，推荐补充对应的单元测试以覆盖新场景。
+- 可结合 `python -m app.__main__ count --model ... --text ...` 进行快速手动验证。
+
+---
+
+## 📄 许可证
+项目未附带特定开源许可证，可按需在内部或个人项目中学习、扩展。

@@ -7,6 +7,7 @@ from typing import Dict
 from ..models import ModelSpec, TokenizerSpec
 from .base import TokenizerAdapter
 from .regex_tokenizer import RegexTokenizer
+from .huggingface_tokenizer import HuggingFaceTokenizer
 
 
 class UnknownTokenizerError(ValueError):
@@ -41,6 +42,8 @@ class TokenizerRegistry:
             from .simple_byte_tokenizer import ByteTokenizer
 
             return ByteTokenizer(name=name)
+        if type_name in {"huggingface", "hf"}:
+            return HuggingFaceTokenizer(name=name, **options)
         raise UnknownTokenizerError(f"Unknown tokenizer type: {spec.type}")
 
     def invalidate(self, cache_key: str | None = None) -> None:

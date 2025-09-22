@@ -22,10 +22,10 @@ class TokenServiceTests(unittest.TestCase):
         self.assertEqual(result["usage_ratio"], result["token_count"] / 128000)
         self.assertGreaterEqual(result["pricing"]["estimated_input_cost"], 0)
 
-    def test_calculate_handles_whitespace_model(self):
+    def test_calculate_handles_huggingface_model(self):
         result = self.service.calculate("deepseek-chat", "Hello\n\nworld")
-        self.assertIn("<ws>", result["tokens"])
-        self.assertEqual(result["token_count"], len(result["tokens"]))
+        self.assertEqual(result["tokens"], ["Hello", "world"])
+        self.assertEqual(result["token_count"], 2)
 
 
 if __name__ == "__main__":

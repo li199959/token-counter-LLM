@@ -28,11 +28,13 @@
     "description": "Community edition DeepSeek conversational model.",
     "max_context": 65536,
     "tokenizer": {
-      "type": "regex",
+      "type": "huggingface",
       "options": {
-        "name": "deepseek-regex",
-        "keep_whitespace": true,
-        "collapse_whitespace": true
+        "name": "deepseek-v3-tokenizer",
+        "repo_id": "deepseek-ai/DeepSeek-V3",
+        "revision": "main",
+        "tokenizer_file": "tokenizer.json",
+        "add_special_tokens": false
       }
     },
     "pricing": null
@@ -45,11 +47,13 @@
     "description": "Open Qwen 2 7B model",
     "max_context": 131072,
     "tokenizer": {
-      "type": "regex",
+      "type": "huggingface",
       "options": {
-        "name": "qwen-regex",
-        "keep_whitespace": false,
-        "collapse_whitespace": false
+        "name": "qwen2-tokenizer",
+        "repo_id": "Qwen/Qwen2-7B-Instruct",
+        "revision": "main",
+        "tokenizer_file": "tokenizer.json",
+        "add_special_tokens": false
       }
     },
     "pricing": null
