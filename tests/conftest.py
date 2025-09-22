@@ -15,7 +15,7 @@ class _DummyEncoding:
 
 
 class _DummyBackend:
-    def encode(self, text, add_special_tokens=False):
+    def encode(self, text, add_special_tokens: bool = False):
         normalized = " ".join(text.replace("\n", " ").split())
         core = normalized.split(" ") if normalized else []
         tokens = list(core)
@@ -26,11 +26,16 @@ class _DummyBackend:
 
 @pytest.fixture(autouse=True)
 def _stub_hf_tokenizer(monkeypatch, request):
-    """Provide a lightweight stub when optional deps are missing."""
+    """Provide a lightweight stub when optional deps are missing.
 
+    Auto-activates unless the test is marked with @pytest.mark.no_stub_hf
+    or if the real `tokenizers` package is available.
+    """
+    # allow tests to opt out with: @pytest.mark.no_stub_hf
     if request.node.get_closest_marker("no_stub_hf"):
         return
 
+    # if real deps exist, don't stub
     if importlib.util.find_spec("tokenizers") is not None:
         return
 

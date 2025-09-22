@@ -1,5 +1,5 @@
+codex/check-code-functionality-and-update-readme-lxrnr4
 # 大模型 Token 计算器
-
 一个只依赖 Hugging Face 官方 `tokenizer.json` 的大模型 Token 统计工具，既可以作为命令行程序使用，也可以通过内置 HTTP 服务或 Vercel Serverless 函数对外提供接口。项目内置的所有模型都通过 `HuggingFaceTokenizer` 按需下载 tokenizer，并可离线缓存。仓库同时附带一个极简的前端页面，便于快速体验和部署。
 
 ---
@@ -186,3 +186,5 @@ requirements.txt          # 可选依赖（tokenizers 等）
 ## 📄 许可证
 
 项目未附带特定开源许可证，可按需学习、使用或二次开发。
+=======
+main
