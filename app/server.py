@@ -10,6 +10,10 @@ from typing import Callable
 
 from .config import load_registry
 from .services.token_service import ModelNotFoundError, TokenService
+from .tokenizers.huggingface_tokenizer import (
+    MissingDependencyError,
+    TokenizerDownloadError,
+)
 from .tokenizers.registry import TokenizerRegistry
 
 
@@ -97,6 +101,9 @@ def _build_handler(service: TokenService) -> Callable[..., BaseHTTPRequestHandle
                 result = service.calculate(model_id=model_id, text=text)
             except ModelNotFoundError:
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": f"unknown model '{model_id}'"})
+                return
+            except (MissingDependencyError, TokenizerDownloadError) as exc:
+                self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
                 return
 
             self._send_json(HTTPStatus.OK, result)

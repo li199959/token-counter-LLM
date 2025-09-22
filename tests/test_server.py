@@ -2,12 +2,15 @@ import json
 import threading
 import time
 import unittest
+from http import HTTPStatus
 from http.client import HTTPConnection
 from http.server import HTTPServer
+from unittest import mock
 
 from app.config import load_registry
 from app.server import _build_handler
 from app.services.token_service import TokenService
+from app.tokenizers.huggingface_tokenizer import TokenizerDownloadError
 from app.tokenizers.registry import TokenizerRegistry
 
 
@@ -17,6 +20,7 @@ class ServerIntegrationTests(unittest.TestCase):
         models = load_registry()
         registry = TokenizerRegistry()
         service = TokenService(models=models, registry=registry)
+        cls.service = service
         cls.httpd = HTTPServer(("127.0.0.1", 0), _build_handler(service))
         cls.port = cls.httpd.server_address[1]
         cls._thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
@@ -68,6 +72,25 @@ class ServerIntegrationTests(unittest.TestCase):
         data = json.loads(body.decode("utf-8"))
         self.assertEqual(data["model"]["id"], "openai-gpt2")
         self.assertGreater(data["token_count"], 0)
+
+    def test_tokenize_endpoint_surfaces_tokenizer_errors(self):
+        payload = json.dumps({"model": "openai-gpt2", "text": "Hello"}).encode("utf-8")
+        with mock.patch.object(
+            type(self).service,
+            "calculate",
+            side_effect=TokenizerDownloadError("requires authentication"),
+        ):
+            status, content_type, body, _ = self._request(
+                "POST",
+                "/tokenize",
+                body=payload,
+                headers={"Content-Type": "application/json"},
+            )
+
+        self.assertEqual(status, HTTPStatus.SERVICE_UNAVAILABLE)
+        self.assertIn("application/json", content_type)
+        data = json.loads(body.decode("utf-8"))
+        self.assertIn("requires authentication", data["error"])
 
     def test_options_request_returns_cors_headers(self):
         status, _, _, cors = self._request("OPTIONS", "/tokenize")

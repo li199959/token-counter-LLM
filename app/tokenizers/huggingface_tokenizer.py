@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Iterable, Sequence
 
 from .base import TokenizerAdapter
 
@@ -59,6 +60,8 @@ class HuggingFaceTokenizer(TokenizerAdapter):
         add_special_tokens: bool = False,
         user_agent: str | None = None,
         download_timeout: float = 30.0,
+        auth_token: str | None = None,
+        auth_token_env: str | Sequence[str] | None = None,
     ) -> None:
         super().__init__(name=name)
         if not repo_id:
@@ -73,6 +76,7 @@ class HuggingFaceTokenizer(TokenizerAdapter):
         self._add_special_tokens = bool(add_special_tokens)
         self._user_agent = user_agent or _DEFAULT_USER_AGENT
         self._download_timeout = float(download_timeout)
+        self._auth_token = self._resolve_auth_token(auth_token, auth_token_env)
         self._backend = None
 
     # ------------------------------------------------------------------
@@ -104,10 +108,24 @@ class HuggingFaceTokenizer(TokenizerAdapter):
 
     def _download_tokenizer_file(self, target_path: Path) -> Path:
         url = f"https://huggingface.co/{self._repo_id}/resolve/{self._revision}/{self._tokenizer_file}"
-        request = urllib.request.Request(url, headers={"User-Agent": self._user_agent})
+        headers = {"User-Agent": self._user_agent}
+        if self._auth_token:
+            headers["Authorization"] = f"Bearer {self._auth_token}"
+        request = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(request, timeout=self._download_timeout) as response:
                 data = response.read()
+        except urllib.error.HTTPError as exc:  # pragma: no cover - network failure path
+            auth_hint = ""
+            if exc.code in {401, 403}:
+                auth_hint = (
+                    " Repository access was denied."
+                    " Provide a Hugging Face access token via the 'auth_token' option"
+                    " or the HUGGINGFACE_TOKEN / HUGGINGFACEHUB_API_TOKEN environment variables."
+                )
+            raise TokenizerDownloadError(
+                f"Failed to download tokenizer from {url}: HTTP {exc.code} {exc.reason}.{auth_hint}"
+            ) from exc
         except urllib.error.URLError as exc:  # pragma: no cover - network failure path
             raise TokenizerDownloadError(f"Failed to download tokenizer from {url}: {exc}") from exc
 
@@ -146,3 +164,30 @@ class HuggingFaceTokenizer(TokenizerAdapter):
             raise RuntimeError("The Hugging Face backend did not return token data.")
         return list(tokens)
 
+    # ------------------------------------------------------------------
+    # Authentication helpers
+    def _resolve_auth_token(
+        self,
+        explicit_token: str | None,
+        env_names: str | Sequence[str] | None,
+    ) -> str | None:
+        if explicit_token:
+            return explicit_token
+
+        candidates: Iterable[str]
+        if env_names is None:
+            candidates = ()
+        elif isinstance(env_names, str):
+            candidates = (env_names,)
+        else:
+            candidates = env_names
+
+        checked: set[str] = set()
+        for name in (*candidates, "HUGGINGFACE_TOKEN", "HUGGINGFACEHUB_API_TOKEN", "HF_TOKEN"):
+            if not name or name in checked:
+                continue
+            checked.add(name)
+            value = os.getenv(name)
+            if value:
+                return value
+        return None

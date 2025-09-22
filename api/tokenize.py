@@ -7,6 +7,10 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 
 from ._shared import ModelNotFoundError, get_service, send_empty, send_json
+from app.tokenizers.huggingface_tokenizer import (
+    MissingDependencyError,
+    TokenizerDownloadError,
+)
 
 
 class handler(BaseHTTPRequestHandler):  # noqa: N801 - Vercel naming requirement
@@ -36,6 +40,9 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 - Vercel naming requirement
             result = service.calculate(model_id=model_id, text=text)
         except ModelNotFoundError:
             send_json(self, HTTPStatus.NOT_FOUND, {"error": f"unknown model '{model_id}'"})
+            return
+        except (MissingDependencyError, TokenizerDownloadError) as exc:
+            send_json(self, HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc)})
             return
 
         send_json(self, HTTPStatus.OK, result)
