@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>大模型 Token 计算器</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at top, #f5f7ff, #e2e8f0);
+      min-height: 100vh;
+      color: #1f2933;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    .app-shell {
+      width: min(960px, 100%);
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 24px 48px rgba(15, 23, 42, 0.16);
+      border-radius: 18px;
+      padding: 32px clamp(18px, 4vw, 40px);
+      backdrop-filter: blur(8px);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      color: #0f172a;
+    }
+
+    header p {
+      margin: 6px 0 0;
+      color: #475569;
+      font-size: 0.98rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .model-select {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    label span.label {
+      font-weight: 600;
+      color: #1e293b;
+      font-size: 0.95rem;
+    }
+
+    select,
+    textarea {
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      background: rgba(255, 255, 255, 0.82);
+      color: inherit;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      outline: none;
+    }
+
+    select:focus,
+    textarea:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 220px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .model-meta {
+      background: rgba(99, 102, 241, 0.08);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: grid;
+      gap: 6px;
+      font-size: 0.9rem;
+      color: #4338ca;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: rgba(15, 23, 42, 0.04);
+      border-radius: 16px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+
+    .stat-card .title {
+      font-size: 0.85rem;
+      color: #475569;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .stat-card .value {
+      font-size: clamp(1.4rem, 3vw, 2rem);
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    .stat-card.small .value {
+      font-size: clamp(1.1rem, 2.4vw, 1.6rem);
+    }
+
+    .stat-card .note {
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+
+    .warning {
+      color: #b91c1c;
+    }
+
+    .status {
+      min-height: 24px;
+      font-size: 0.9rem;
+      color: #16a34a;
+    }
+
+    .status.error {
+      color: #b91c1c;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 16px 12px;
+      }
+
+      .app-shell {
+        padding: 24px 18px;
+      }
+    }
+  </style>
+</head>
+<body data-api-base="">
+  <div class="app-shell">
+    <header>
+      <h1>大模型 Token 计算器</h1>
+      <p>粘贴文本并选择模型，实时查看 Token 数量与上下文占用情况。</p>
+    </header>
+
+    <section class="controls">
+      <div class="model-select">
+        <label>
+          <span class="label">选择模型</span>
+          <select id="model-select" aria-label="选择用于计算的模型"></select>
+        </label>
+        <div id="model-meta" class="model-meta">正在加载模型信息…</div>
+      </div>
+    </section>
+
+    <section>
+      <label for="text-input">
+        <span class="label">输入文本</span>
+      </label>
+      <textarea id="text-input" placeholder="在此粘贴或输入需要估算 Token 的内容…"></textarea>
+    </section>
+
+    <section class="stats" aria-live="polite">
+      <article class="stat-card">
+        <div class="title">Token 数</div>
+        <div id="token-count" class="value">0</div>
+        <div class="note">模型 tokenizer 计算结果</div>
+      </article>
+      <article class="stat-card small">
+        <div class="title">字符数</div>
+        <div id="char-count" class="value">0</div>
+        <div class="note">原始文本字符数量</div>
+      </article>
+      <article class="stat-card small">
+        <div class="title">上下文占用</div>
+        <div id="usage" class="value">--</div>
+        <div class="note">基于模型最大上下文长度</div>
+      </article>
+      <article class="stat-card small">
+        <div class="title">剩余 Token</div>
+        <div id="remaining" class="value">--</div>
+        <div class="note">可用上下文余量</div>
+      </article>
+      <article class="stat-card small">
+        <div class="title">估算费用</div>
+        <div id="pricing" class="value">--</div>
+        <div class="note">基于输入单价估算</div>
+      </article>
+    </section>
+
+    <div id="status" class="status" role="status"></div>
+  </div>
+
+  <script>
+    (function () {
+      const rootConfig = window.__TOKEN_COUNTER_CONFIG__ || {};
+      const apiBase = (document.body.dataset.apiBase || rootConfig.apiBase || '').replace(/\/$/, '');
+      const buildUrl = (path) => `${apiBase}${path}`;
+
+      const modelSelect = document.getElementById('model-select');
+      const modelMeta = document.getElementById('model-meta');
+      const textInput = document.getElementById('text-input');
+      const tokenCount = document.getElementById('token-count');
+      const charCount = document.getElementById('char-count');
+      const usage = document.getElementById('usage');
+      const remaining = document.getElementById('remaining');
+      const pricing = document.getElementById('pricing');
+      const status = document.getElementById('status');
+
+      const numberFormat = new Intl.NumberFormat('zh-CN');
+      const percentFormat = new Intl.NumberFormat('zh-CN', { style: 'percent', maximumFractionDigits: 2 });
+      let debounceTimer = null;
+      let models = [];
+
+      function setStatus(message, isError) {
+        status.textContent = message || '';
+        status.classList.toggle('error', Boolean(isError));
+      }
+
+      function describeModel(model) {
+        if (!model) {
+          modelMeta.textContent = '暂无可用模型';
+          return;
+        }
+
+        const maxContext = model.max_context ? `${numberFormat.format(model.max_context)} tokens` : '未知';
+        const parts = [
+          `模型：${model.display_name}`,
+          `系列：${model.family}`,
+          `提供方：${model.provider}`,
+          `上下文：${maxContext}`
+        ];
+
+        if (model.description) {
+          parts.push(model.description);
+        }
+
+        if (model.pricing && model.pricing.input_per_1k) {
+          parts.push(`输入单价：${model.pricing.currency} ${model.pricing.input_per_1k} / 1K tokens`);
+        }
+
+        modelMeta.innerHTML = parts.map((part) => `<span>${part}</span>`).join('');
+      }
+
+      function updateCounts(data) {
+        const tokenTotal = data.token_count || 0;
+        tokenCount.textContent = numberFormat.format(tokenTotal);
+        const maxContext = data.max_context;
+
+        if (typeof maxContext === 'number' && maxContext > 0) {
+          const usedRatio = data.usage_ratio || 0;
+          usage.textContent = percentFormat.format(Math.min(usedRatio, 1));
+          const remainingTokens = Math.max(maxContext - tokenTotal, 0);
+          remaining.textContent = numberFormat.format(remainingTokens);
+          remaining.classList.toggle('warning', remainingTokens === 0 && tokenTotal > 0);
+        } else {
+          usage.textContent = '--';
+          remaining.textContent = '--';
+          remaining.classList.remove('warning');
+        }
+
+        if (data.pricing && typeof data.pricing.estimated_input_cost === 'number') {
+          const currency = data.pricing.currency || 'USD';
+          pricing.textContent = `${currency} ${data.pricing.estimated_input_cost.toFixed(4)}`;
+        } else {
+          pricing.textContent = '--';
+        }
+      }
+
+      function scheduleCalculation() {
+        const text = textInput.value;
+        charCount.textContent = numberFormat.format(text.length);
+        if (!modelSelect.value) {
+          return;
+        }
+
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
+
+        debounceTimer = setTimeout(() => {
+          calculateTokens(text);
+        }, 320);
+      }
+
+      async function calculateTokens(text) {
+        try {
+          setStatus('正在计算…');
+          const response = await fetch(buildUrl('/tokenize'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: modelSelect.value, text })
+          });
+
+          if (!response.ok) {
+            throw new Error(`请求失败：${response.status}`);
+          }
+
+          const payload = await response.json();
+          updateCounts(payload);
+          setStatus('');
+        } catch (error) {
+          console.error(error);
+          setStatus('计算失败，请稍后重试。', true);
+        }
+      }
+
+      async function loadModels() {
+        try {
+          setStatus('正在加载模型…');
+          const response = await fetch(buildUrl('/models'));
+          if (!response.ok) {
+            throw new Error(`加载模型失败：${response.status}`);
+          }
+          const payload = await response.json();
+          models = payload.models || [];
+          modelSelect.innerHTML = '';
+
+          if (models.length === 0) {
+            describeModel(null);
+            setStatus('没有可用的模型配置。', true);
+            return;
+          }
+
+          for (const model of models) {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = `${model.display_name} · ${model.provider}`;
+            modelSelect.appendChild(option);
+          }
+
+          describeModel(models[0]);
+          modelSelect.value = models[0].id;
+          setStatus('');
+          scheduleCalculation();
+        } catch (error) {
+          console.error(error);
+          describeModel(null);
+          setStatus('模型列表加载失败。', true);
+        }
+      }
+
+      modelSelect.addEventListener('change', () => {
+        const selected = models.find((model) => model.id === modelSelect.value);
+        describeModel(selected);
+        scheduleCalculation();
+      });
+
+      textInput.addEventListener('input', scheduleCalculation);
+
+      loadModels();
+      textInput.focus();
+    })();
+  </script>
+</body>
+</html>

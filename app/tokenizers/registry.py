@@ -6,7 +6,7 @@ from typing import Dict
 
 from ..models import ModelSpec, TokenizerSpec
 from .base import TokenizerAdapter
-from .regex_tokenizer import RegexTokenizer
+from .huggingface_tokenizer import HuggingFaceTokenizer
 
 
 class UnknownTokenizerError(ValueError):
@@ -35,13 +35,13 @@ class TokenizerRegistry:
         options = dict(spec.options)
         name = options.pop("name", type_name)
 
-        if type_name == "regex":
-            return RegexTokenizer(name=name, **options)
-        if type_name == "byte":
-            from .simple_byte_tokenizer import ByteTokenizer
+        if type_name in {"huggingface", "hf"}:
+            return HuggingFaceTokenizer(name=name, **options)
 
-            return ByteTokenizer(name=name)
-        raise UnknownTokenizerError(f"Unknown tokenizer type: {spec.type}")
+        raise UnknownTokenizerError(
+            "Only Hugging Face tokenizers are supported."
+            f" Unknown tokenizer type: {spec.type!r}"
+        )
 
     def invalidate(self, cache_key: str | None = None) -> None:
         """Remove cached tokenizers."""

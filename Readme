@@ -1,107 +1,188 @@
-# 大模型 Token 计算器设计方案
+# 大模型 Token 计算器
 
-## 1. 项目目标
-- 为用户提供一个简单、快速的方式来估算文本在不同大模型下的 token 数量。
-- 支持 OpenAI GPT 系列（gpt-3.5、gpt-4、gpt-4o 等）、阿里 Qwen 系列、DeepSeek 系列等常见模型。
-- 支持根据模型不同的上下文长度限制给出超限提醒，并预估费用（若有价格信息）。
+一个只依赖 Hugging Face 官方 `tokenizer.json` 的大模型 Token 统计工具，既可以作为命令行程序使用，也可以通过内置 HTTP 服务或 Vercel Serverless 函数对外提供接口。项目内置的所有模型都通过 `HuggingFaceTokenizer` 按需下载 tokenizer，并可离线缓存。仓库同时附带一个极简的前端页面，便于快速体验和部署。
 
-## 2. 核心需求与功能列表
-1. **文本输入**：支持多语言长文本粘贴，实时统计字符数、行数。
-2. **模型选择**：
-   - 预置模型列表（按厂商分组），提供搜索/收藏功能。
-   - 显示模型上下文长度、token 价格等元信息。
-3. **Token 计算**：
-   - 根据所选模型对应的分词器计算 token 数。
-   - 对于不在列表内的模型允许用户选择相近的分词规则或上传自定义 vocab。
-4. **结果展示**：
-   - 展示 token 数、已用上下文百分比、估算费用。
-   - 若超出上下文长度，给出拆分建议或提示。
-5. **历史记录与导出**：允许用户保存、导出计算结果。
-6. **开发者模式**：提供 API，支持第三方调用。
+---
 
-## 3. Tokenizer 设计
-| 模型系列 | 分词器方案 | 说明 |
-| --- | --- | --- |
-| GPT 系列 | 使用 [tiktoken](https://github.com/openai/tiktoken) 或 OpenAI 提供的官方编码器。 | 需要预先下载模型对应的 encoding（如 `cl100k_base` 等）。 |
-| DeepSeek 系列 | 使用官方开源的 BPE vocab（可通过 `sentencepiece` 或 `tokenizers` 加载）。 | DeepSeek 官方仓库提供 `tokenizer.model`，可用 `sentencepiece` 解码。 |
-| Qwen 系列 | 使用阿里提供的 tiktoken 兼容版或开源的 `tiktoken_qwen`。 | 需根据模型版本选择对应词表。 |
-| 自定义模型 | 支持上传 BPE/ sentencepiece 词表，使用 HuggingFace `tokenizers` 动态加载。 | 允许用户选择分词模式（BPE、Unigram、WordPiece 等）。 |
+## 🚀 快速开始
 
-> **实现建议**：将 tokenizer 抽象为统一接口 `TokenizerAdapter`，封装 `encode(text) -> tokens` 与 `decode(tokens)`。
+### 1. 准备运行环境
+- Python ≥ 3.10（在 Python 3.12 上测试通过）。
+- 必装依赖：标准库即可运行核心逻辑。
+- 推荐安装 [`tokenizers`](https://pypi.org/project/tokenizers/)（以及可选的 [`huggingface-hub`](https://pypi.org/project/huggingface-hub/) 以支持更丰富的缓存策略），用于加载 Hugging Face tokenizer。
 
-## 4. 系统架构
-```
-┌──────────────────────────────────────────────────────┐
-│                      前端 Web                        │
-│ ┌─────────────┐ ┌─────────────┐ ┌──────────────────┐ │
-│ │ 文本输入区   │ │ 模型选择面板 │ │ 结果展示/历史区    │ │
-│ └─────────────┘ └─────────────┘ └──────────────────┘ │
-└────────────┬────────────────────────────────────────┘
-             │HTTPS/REST + WebSocket (用于实时反馈)
-┌────────────┴────────────────────────────────────────┐
-│                      后端服务                        │
-│ ┌──────────────────────────────────────────────────┐ │
-│ │ Tokenizer Service                                │ │
-│ │  - 统一适配层                                     │ │
-│ │  - 模型元信息缓存/加载                             │ │
-│ ├──────────────────────────────────────────────────┤ │
-│ │ Metadata Service                                  │ │
-│ │  - 模型配置（上下文长度、价格）                    │ │
-│ │  - 更新任务（定时同步官网/开源项目数据）           │ │
-│ ├──────────────────────────────────────────────────┤ │
-│ │ API Gateway / GraphQL 层                          │ │
-│ └──────────────────────────────────────────────────┘ │
-│               ↕                                    ↕  │
-│         Redis/Memcached (缓存)      PostgreSQL/SQLite │
-└──────────────────────────────────────────────────────┘
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows 使用 .venv\Scripts\activate
+pip install -r requirements.txt  # 若只想跑测试，可跳过此步
 ```
 
-## 5. 前端设计要点
-- **技术栈**：React + TypeScript + TailwindCSS，或使用 Vue + Element Plus。
-- **实时反馈**：文本输入触发 debounced 请求（例如 300ms）到后端获取 token 数；对于短文本可直接在前端本地计算（加载 wasm/tokenizer）。
-- **模型列表**：支持分组折叠、搜索、收藏、最近使用。
-- **辅助功能**：
-  - 一键复制 token 结果。
-  - 粘贴 Markdown/代码自动保留格式。
-  - 支持黑暗模式。
+### 2. 运行自动化测试
 
-## 6. 后端设计要点
-- **技术栈**：Python（FastAPI）或 Node.js（NestJS）。
-- **Tokenizer Adapter**：
-  - 抽象类定义 `name`, `max_context`, `calculate_tokens(text)`。
-  - 针对不同模型加载对应词表，考虑热加载与缓存。
-- **性能优化**：
-  - 长文本使用异步任务，返回任务 ID，完成后推送结果。
-  - 常用模型词表缓存到内存，减少磁盘读取。
-- **可扩展性**：
-  - Model Metadata 存储配置项（上下文长度、默认价格、发布信息等）。
-  - 新增模型只需更新配置与词表即可。
+仓库附带覆盖 CLI、服务层、HTTP 服务器与 Hugging Face 分词器的测试：
 
-## 7. Token 计算流程
-1. 用户粘贴文本并选择模型。
-2. 前端发送 `POST /api/tokenize`，包含文本、模型标识。
-3. 后端根据模型标识加载对应 Tokenizer Adapter。
-4. 调用 `adapter.encode(text)` 返回 token 序列。
-5. 计算 token 数、上下文占比、费用估算，响应给前端。
-6. 记录请求日志（匿名化）用于使用统计。
+```bash
+pytest
+```
 
-## 8. 扩展与增值功能
-- **批量模式**：上传文件（txt、md、docx），按段落或文件进行统计。
-- **Prompt 模版库**：结合常见 Prompt 模板计算 token 使用量。
-- **团队协作**：成员共享历史记录、设置统一计费标准。
-- **浏览器插件/VSCode 插件**：直接在编辑器中获取 token 数。
+### 3. 命令行使用示例
 
-## 9. 安全与隐私
-- 对用户粘贴文本进行本地加密传输，后端默认不持久化原始文本。
-- 提供本地部署模式，确保敏感数据不出内网。
+```bash
+# 查看模型列表
+python -m app.__main__ models
 
-## 10. 部署方案
-- 使用 Docker Compose 部署（web、api、redis、db）。
-- 支持云服务（Vercel/Netlify + Render/Fly.io）或企业内网 Kubernetes。
+# 统计文本 Token 数
+python -m app.__main__ count --model openai-gpt2 --text "Hello world"
 
-## 11. 迭代路线图
-1. **MVP**：支持 GPT/DeepSeek/Qwen 三大系列核心模型的 token 计算，前端实时展示。
-2. **增强版**：加入费用估算、历史记录、批量导入。
-3. **专业版**：提供团队协作、API 接口、插件生态。
+# 从文件读取文本后统计
+python -m app.__main__ count --model qwen-2-7b --file ./sample.txt
+```
 
+命令行会输出 JSON 结果，便于脚本或其他工具继续处理。
 
+---
+
+## 🛠 HTTP 服务与演示前端
+
+通过 `python -m app.__main__ serve --host 0.0.0.0 --port 8000` 可以启动一个基于标准库 `http.server` 的轻量级服务：
+
+- `GET /`：返回 `frontend/index.html` 中的单页应用。页面默认访问同源的 `/models` 与 `/tokenize` 接口。
+- `GET /models`：输出所有模型元信息。
+- `POST /tokenize`：接受 `{"model": "deepseek-chat", "text": "你好"}` 格式的请求并返回 Token 统计数据。
+
+服务端默认携带 `Access-Control-Allow-Origin: *`，因此前端也可以托管在其他域名下，只需将页面中的 `data-api-base` 属性或 `window.__TOKEN_COUNTER_CONFIG__.apiBase` 指向后端地址即可。
+
+---
+
+## 🎨 前端页面说明
+
+- 前端源码位于 `frontend/index.html`，纯静态 HTML + CSS + 原生 JavaScript，支持直接部署在任意静态托管平台。
+- 运行在浏览器时，会读取 `<body data-api-base="">` 中的地址作为 API 根路径。默认留空表示与当前页面同源。
+- 也可在部署时通过注入 `window.__TOKEN_COUNTER_CONFIG__ = { apiBase: "https://your-endpoint" }` 的方式覆盖 API 根路径。
+
+若仅想本地体验静态页面，可使用任意静态服务器（如 `python -m http.server`）托管 `frontend/`，再将 `data-api-base` 指向后端地址即可。
+
+---
+
+## ☁️ 在 Vercel 上部署
+
+仓库已经准备好 Vercel 所需的目录结构：
+
+1. `frontend/index.html` 作为静态主页，`vercel.json` 将根路径重写到该文件。
+2. `api/models.py` 与 `api/tokenize.py` 使用 Vercel Python Serverless 约定的 `BaseHTTPRequestHandler` 形式实现 REST API，自动复用 `app` 包中的业务逻辑。
+3. `api/_shared.py` 负责在 Serverless 环境中懒加载 `TokenService` 并处理统一的 CORS 响应。
+
+部署步骤示例：
+
+```bash
+# 1. 安装依赖并确保 Hugging Face 分词器可用
+pip install -r requirements.txt
+
+# 2. 安装并登录 Vercel CLI
+npm install -g vercel
+vercel login
+
+# 3. 在仓库根目录执行预览部署
+vercel --prod
+```
+
+部署完成后：
+- `https://<project>.vercel.app/` 会渲染前端页面。
+- `/models` 和 `/tokenize` 会分别调用 Python Serverless 函数。
+- 若需要提前缓存 `tokenizer.json`，可以在本地运行一次 CLI 或设置 `HF_HOME` / `HF_HUB_CACHE` 环境变量以复用缓存目录。
+
+---
+
+## 🤖 Hugging Face 分词配置
+
+所有模型均通过 `app/resources/model_registry.json` 描述，核心字段示例：
+
+```json
+{
+  "id": "deepseek-chat",
+  "max_context": 65536,
+  "tokenizer": {
+    "type": "huggingface",
+    "options": {
+      "name": "deepseek-v3-tokenizer",
+      "repo_id": "deepseek-ai/DeepSeek-V3",
+      "tokenizer_file": "tokenizer.json",
+      "add_special_tokens": false
+    }
+  }
+}
+```
+
+`HuggingFaceTokenizer` 支持以下可选参数：
+- `repo_id` / `revision` / `tokenizer_file`：定位 Hugging Face 仓库资源。
+- `cache_dir`：自定义缓存目录（默认 `~/.cache/token-counter-llm/`）。
+- `local_tokenizer_path`：直接使用本地文件而跳过下载。
+- `local_files_only`：禁止网络访问，仅在缓存存在时才会成功。
+- `add_special_tokens`：在计数时自动注入 BOS/EOS 等特殊符号。
+- `auth_token`：显式传入 Hugging Face 访问令牌，用于访问需要授权的仓库。
+- `auth_token_env`：自定义从环境变量读取令牌的键名。若未配置，默认会依次尝试 `HUGGINGFACE_TOKEN`、`HUGGINGFACEHUB_API_TOKEN` 与 `HF_TOKEN`。
+
+> ⚠️ **关于受限仓库**：DeepSeek、Qwen 等模型的 tokenizer 常常要求先在 Hugging Face 官网上同意条款后才能下载。
+> - 登录 Hugging Face，访问目标仓库的 `Files and versions` 页面并点击 `Access repository` 完成授权。
+> - 在项目部署环境（本地或 Vercel）中设置 `HUGGINGFACE_TOKEN=<your token>` 环境变量，或在模型配置中使用 `"auth_token"` / `"auth_token_env"` 选项。
+> - 如果服务端未配置令牌，请求 `/tokenize` 时会返回 `503`，并提示需要提供 Hugging Face token。
+
+---
+
+## 📁 目录结构
+
+```
+app/
+├── __main__.py           # 命令行入口
+├── server.py             # 标准库 HTTP 服务
+├── config.py             # 模型注册表加载
+├── models.py             # 数据结构定义
+├── services/
+│   └── token_service.py  # 业务核心：读取模型并计算 Token
+├── tokenizers/
+│   ├── base.py           # 分词器抽象基类
+│   ├── huggingface_tokenizer.py
+│   └── registry.py       # 仅注册 Hugging Face 分词器
+├── resources/
+│   └── model_registry.json
+api/
+├── _shared.py            # Vercel Serverless 公共工具
+├── models.py             # `/models` 接口
+└── tokenize.py           # `/tokenize` 接口
+frontend/
+└── index.html            # 演示与托管用前端页面
+vercel.json               # 部署到 Vercel 时的路由重写配置
+requirements.txt          # 可选依赖（tokenizers 等）
+```
+
+---
+
+## 🧠 核心实现原理
+
+1. **模型注册**（`app/config.py`）：读取 `model_registry.json` 并构造 `ModelSpec`、`TokenizerSpec` 等数据结构。
+2. **分词器工厂**（`app/tokenizers/registry.py`）：目前仅支持 Hugging Face 类型，自动管理缓存实例。
+3. **业务服务**（`app/services/token_service.py`）：对外暴露 `calculate()`，计算 Token 数量、上下文占用和费用估算。
+4. **HTTP 层**（`app/server.py` 与 `api/`）：统一使用标准库 `BaseHTTPRequestHandler`，并补全 CORS 头，以便与前端或跨域请求交互。
+5. **前端页面**：通过 Fetch API 调用 `/models` 与 `/tokenize`，并将统计结果实时渲染到界面。
+
+---
+
+## 🔧 扩展建议
+
+- **新增模型**：在 `model_registry.json` 添加条目，指向目标 Hugging Face 仓库与 tokenizer。
+- **替换/新增 Tokenizer**：如需扩展，可在 `app/tokenizers/` 中编写新的实现，并在 `TokenizerRegistry` 中注册相应类型。
+- **更多部署方式**：Serverless 实现使用的都是纯 Python 标准库，若要迁移到 AWS Lambda / Cloudflare Workers 等，只需根据平台接口封装 `_shared.get_service()` 即可。
+
+---
+
+## 🧪 开发提示
+
+- 修改或新增功能后，务必运行 `pytest` 确认回归通过。
+- 可使用 CLI 或 HTTP 接口做快速手动验证。
+- 若准备部署在线服务，请确保 `tokenizers` 与所需 tokenizer 资源已经成功缓存，避免首次请求的延迟。
+
+---
+
+## 📄 许可证
+
+项目未附带特定开源许可证，可按需学习、使用或二次开发。
