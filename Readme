@@ -104,46 +104,4 @@
 2. **增强版**：加入费用估算、历史记录、批量导入。
 3. **专业版**：提供团队协作、API 接口、插件生态。
 
----
-如需进一步的技术细节或原型设计，可以在此基础上继续细化。
 
-## 12. 代码实现概述
-- 使用纯标准库实现，可在无第三方依赖的环境运行。
-- 核心模块划分：
-  - `app/config.py`：加载模型与分词器配置（默认 `app/resources/model_registry.json`）。
-  - `app/tokenizers/`：实现可配置的正则分词器与字节分词器，并提供注册表工厂。
-  - `app/services/token_service.py`：聚合模型元数据与分词器，对外提供计算接口。
-  - `app/server.py`：基于 `http.server` 提供 `/models` 与 `/tokenize` HTTP API。
-  - `app/__main__.py`：命令行入口，支持列出模型、文件/文本计数以及启动服务。
-- 默认内置 GPT、DeepSeek、Qwen 三个系列的模型示例，便于快速扩展：
-  - GPT 使用折叠空白的正则分词方案。
-  - DeepSeek 在计算中保留空白（折叠为 `<ws>`）。
-  - Qwen 保留原始空白差异，便于更精细的统计。
-
-## 13. 使用方式
-### 13.1 命令行
-```bash
-python -m app models               # 查看支持的模型列表
-python -m app count --model gpt-4o-mini --text "测试文本"
-python -m app count --model qwen-2-7b --file sample.txt
-```
-- 可通过 `--registry /path/to/model_registry.json` 指定自定义配置。
-
-### 13.2 HTTP 服务
-```bash
-python -m app serve --host 0.0.0.0 --port 8080
-```
-- `GET /models`：返回模型列表与元信息。
-- `POST /tokenize`：请求体 `{ "model": "gpt-4o-mini", "text": "..." }`，返回 token 数、上下文占用、价格估算等。
-
-### 13.3 扩展模型
-1. 在 `app/resources/model_registry.json` 中新增模型配置，或通过 `--registry` 传入外部 JSON 文件。
-2. 配置项中的 `tokenizer.type` 当前支持 `regex`（可配置正则规则）与 `byte`（按 UTF-8 字节计数）。
-3. 若后续需要接入真实官方 tokenizer，可在 `app/tokenizers` 中新增适配器并在注册表注册即可复用现有服务逻辑。
-
-## 14. 测试
-- 使用 `unittest` 验证分词器、服务层及 CLI 行为。
-- 运行方法：
-```bash
-python -m unittest discover -s tests
-```
