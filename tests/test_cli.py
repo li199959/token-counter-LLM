@@ -16,13 +16,13 @@ class CliTests(unittest.TestCase):
                     str(Path(__file__).resolve().parents[1] / "app" / "resources" / "model_registry.json"),
                     "count",
                     "--model",
-                    "gpt-4o-mini",
+                    "openai-gpt2",
                     "--text",
                     "Hello world",
                 ])
             self.assertEqual(exit_code, 0)
             payload = json.loads(buffer.getvalue())
-            self.assertEqual(payload["model"]["id"], "gpt-4o-mini")
+            self.assertEqual(payload["model"]["id"], "openai-gpt2")
 
     def test_cli_models_lists_entries(self):
         with io.StringIO() as buffer:
