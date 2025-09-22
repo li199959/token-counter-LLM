@@ -1,23 +1,25 @@
 [
   {
-    "id": "gpt-4o-mini",
-    "display_name": "GPT-4o Mini",
+    "id": "openai-gpt2",
+    "display_name": "GPT-2 (community)",
     "family": "gpt",
-    "provider": "OpenAI",
-    "description": "Lightweight GPT model suitable for quick prompt estimation.",
-    "max_context": 128000,
+    "provider": "OpenAI 社区镜像",
+    "description": "开源 GPT-2 checkpoint，使用官方 tokenizer。",
+    "max_context": 1024,
     "tokenizer": {
-      "type": "regex",
+      "type": "huggingface",
       "options": {
-        "name": "gpt-regex",
-        "keep_whitespace": false,
-        "collapse_whitespace": true
+        "name": "gpt2-tokenizer",
+        "repo_id": "openai-community/gpt2",
+        "revision": "main",
+        "tokenizer_file": "tokenizer.json",
+        "add_special_tokens": false
       }
     },
     "pricing": {
       "currency": "USD",
-      "input_per_1k": 0.00015,
-      "output_per_1k": 0.0006
+      "input_per_1k": 0.0004,
+      "output_per_1k": 0.0016
     }
   },
   {
@@ -25,7 +27,7 @@
     "display_name": "DeepSeek Chat",
     "family": "deepseek",
     "provider": "DeepSeek",
-    "description": "Community edition DeepSeek conversational model.",
+    "description": "社区版 DeepSeek 对话模型。",
     "max_context": 65536,
     "tokenizer": {
       "type": "huggingface",
@@ -44,7 +46,7 @@
     "display_name": "Qwen 2 7B",
     "family": "qwen",
     "provider": "Alibaba Cloud",
-    "description": "Open Qwen 2 7B model",
+    "description": "开源 Qwen2-7B Instruct 模型。",
     "max_context": 131072,
     "tokenizer": {
       "type": "huggingface",

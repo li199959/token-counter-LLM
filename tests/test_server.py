@@ -36,21 +36,27 @@ class ServerIntegrationTests(unittest.TestCase):
             conn.request(method, path, body=body, headers=headers or {})
             response = conn.getresponse()
             payload = response.read()
-            return response.status, response.getheader("Content-Type"), payload
+            return (
+                response.status,
+                response.getheader("Content-Type"),
+                payload,
+                response.getheader("Access-Control-Allow-Origin"),
+            )
         finally:
             conn.close()
 
     def test_root_route_serves_frontend(self):
-        status, content_type, payload = self._request("GET", "/")
+        status, content_type, payload, cors = self._request("GET", "/")
         self.assertEqual(status, 200)
         self.assertIn("text/html", content_type)
+        self.assertEqual(cors, "*")
         body = payload.decode("utf-8")
         self.assertIn("<!DOCTYPE html>", body)
         self.assertIn("大模型 Token 计算器", body)
 
     def test_tokenize_endpoint_handles_request(self):
-        payload = json.dumps({"model": "gpt-4o-mini", "text": "Hello world"}).encode("utf-8")
-        status, content_type, body = self._request(
+        payload = json.dumps({"model": "openai-gpt2", "text": "Hello world"}).encode("utf-8")
+        status, content_type, body, cors = self._request(
             "POST",
             "/tokenize",
             body=payload,
@@ -58,9 +64,15 @@ class ServerIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         self.assertIn("application/json", content_type)
+        self.assertEqual(cors, "*")
         data = json.loads(body.decode("utf-8"))
-        self.assertEqual(data["model"]["id"], "gpt-4o-mini")
+        self.assertEqual(data["model"]["id"], "openai-gpt2")
         self.assertGreater(data["token_count"], 0)
+
+    def test_options_request_returns_cors_headers(self):
+        status, _, _, cors = self._request("OPTIONS", "/tokenize")
+        self.assertEqual(status, 204)
+        self.assertEqual(cors, "*")
 
 
 if __name__ == "__main__":

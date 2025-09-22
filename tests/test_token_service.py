@@ -13,13 +13,13 @@ class TokenServiceTests(unittest.TestCase):
 
     def test_list_models_contains_expected_ids(self):
         model_ids = {entry["id"] for entry in self.service.list_models()}
-        self.assertTrue({"gpt-4o-mini", "deepseek-chat", "qwen-2-7b"}.issubset(model_ids))
+        self.assertTrue({"openai-gpt2", "deepseek-chat", "qwen-2-7b"}.issubset(model_ids))
 
     def test_calculate_returns_usage_and_cost_fields(self):
-        result = self.service.calculate("gpt-4o-mini", "Token counting test")
+        result = self.service.calculate("openai-gpt2", "Token counting test")
         self.assertGreater(result["token_count"], 0)
-        self.assertEqual(result["max_context"], 128000)
-        self.assertEqual(result["usage_ratio"], result["token_count"] / 128000)
+        self.assertEqual(result["max_context"], 1024)
+        self.assertEqual(result["usage_ratio"], result["token_count"] / 1024)
         self.assertGreaterEqual(result["pricing"]["estimated_input_cost"], 0)
 
     def test_calculate_handles_huggingface_model(self):
