@@ -13,15 +13,15 @@ from .tokenizers.registry import TokenizerRegistry
 
 
 INDEX_HTML = """<!DOCTYPE html>
-<html lang=\"zh-CN\">
+<html lang="zh-CN">
 <head>
-  <meta charset=\"utf-8\">
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>大模型 Token 计算器</title>
   <style>
     :root {
       color-scheme: light dark;
-      font-family: \"Inter\", system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
     body {
@@ -180,58 +180,58 @@ INDEX_HTML = """<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <div class=\"app-shell\">
+  <div class="app-shell">
     <header>
       <h1>大模型 Token 计算器</h1>
       <p>粘贴文本并选择模型，实时查看 Token 数量与上下文占用情况。</p>
     </header>
 
-    <section class=\"controls\">
-      <div class=\"model-select\">
+    <section class="controls">
+      <div class="model-select">
         <label>
-          <span class=\"label\">选择模型</span>
-          <select id=\"model-select\" aria-label=\"选择用于计算的模型\"></select>
+          <span class="label">选择模型</span>
+          <select id="model-select" aria-label="选择用于计算的模型"></select>
         </label>
-        <div id=\"model-meta\" class=\"model-meta\">正在加载模型信息…</div>
+        <div id="model-meta" class="model-meta">正在加载模型信息…</div>
       </div>
     </section>
 
     <section>
-      <label for=\"text-input\">
-        <span class=\"label\">输入文本</span>
+      <label for="text-input">
+        <span class="label">输入文本</span>
       </label>
-      <textarea id=\"text-input\" placeholder=\"在此粘贴或输入需要估算 Token 的内容…\"></textarea>
+      <textarea id="text-input" placeholder="在此粘贴或输入需要估算 Token 的内容…"></textarea>
     </section>
 
-    <section class=\"stats\" aria-live=\"polite\">
-      <article class=\"stat-card\">
-        <div class=\"title\">Token 数</div>
-        <div id=\"token-count\" class=\"value\">0</div>
-        <div class=\"note\">模型 tokenizer 计算结果</div>
+    <section class="stats" aria-live="polite">
+      <article class="stat-card">
+        <div class="title">Token 数</div>
+        <div id="token-count" class="value">0</div>
+        <div class="note">模型 tokenizer 计算结果</div>
       </article>
-      <article class=\"stat-card small\">
-        <div class=\"title\">字符数</div>
-        <div id=\"char-count\" class=\"value\">0</div>
-        <div class=\"note\">原始文本字符数量</div>
+      <article class="stat-card small">
+        <div class="title">字符数</div>
+        <div id="char-count" class="value">0</div>
+        <div class="note">原始文本字符数量</div>
       </article>
-      <article class=\"stat-card small\">
-        <div class=\"title\">上下文占用</div>
-        <div id=\"usage\" class=\"value\">--</div>
-        <div class=\"note\">基于模型最大上下文长度</div>
+      <article class="stat-card small">
+        <div class="title">上下文占用</div>
+        <div id="usage" class="value">--</div>
+        <div class="note">基于模型最大上下文长度</div>
       </article>
-      <article class=\"stat-card small\">
-        <div class=\"title\">剩余 Token</div>
-        <div id=\"remaining\" class=\"value\">--</div>
-        <div class=\"note\">可用上下文余量</div>
+      <article class="stat-card small">
+        <div class="title">剩余 Token</div>
+        <div id="remaining" class="value">--</div>
+        <div class="note">可用上下文余量</div>
       </article>
-      <article class=\"stat-card small\">
-        <div class=\"title\">估算费用</div>
-        <div id=\"pricing\" class=\"value\">--</div>
-        <div class=\"note\">基于输入单价估算</div>
+      <article class="stat-card small">
+        <div class="title">估算费用</div>
+        <div id="pricing" class="value">--</div>
+        <div class="note">基于输入单价估算</div>
       </article>
     </section>
 
-    <div id=\"status\" class=\"status\" role=\"status\"></div>
+    <div id="status" class="status" role="status"></div>
   </div>
 
   <script>
