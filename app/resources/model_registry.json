@@ -1,0 +1,57 @@
+[
+  {
+    "id": "gpt-4o-mini",
+    "display_name": "GPT-4o Mini",
+    "family": "gpt",
+    "provider": "OpenAI",
+    "description": "Lightweight GPT model suitable for quick prompt estimation.",
+    "max_context": 128000,
+    "tokenizer": {
+      "type": "regex",
+      "options": {
+        "name": "gpt-regex",
+        "keep_whitespace": false,
+        "collapse_whitespace": true
+      }
+    },
+    "pricing": {
+      "currency": "USD",
+      "input_per_1k": 0.00015,
+      "output_per_1k": 0.0006
+    }
+  },
+  {
+    "id": "deepseek-chat",
+    "display_name": "DeepSeek Chat",
+    "family": "deepseek",
+    "provider": "DeepSeek",
+    "description": "Community edition DeepSeek conversational model.",
+    "max_context": 65536,
+    "tokenizer": {
+      "type": "regex",
+      "options": {
+        "name": "deepseek-regex",
+        "keep_whitespace": true,
+        "collapse_whitespace": true
+      }
+    },
+    "pricing": null
+  },
+  {
+    "id": "qwen-2-7b",
+    "display_name": "Qwen 2 7B",
+    "family": "qwen",
+    "provider": "Alibaba Cloud",
+    "description": "Open Qwen 2 7B model",
+    "max_context": 131072,
+    "tokenizer": {
+      "type": "regex",
+      "options": {
+        "name": "qwen-regex",
+        "keep_whitespace": false,
+        "collapse_whitespace": false
+      }
+    },
+    "pricing": null
+  }
+]
