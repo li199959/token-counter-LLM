@@ -1,1 +1,149 @@
-你好
+# 大模型 Token 计算器设计方案
+
+## 1. 项目目标
+- 为用户提供一个简单、快速的方式来估算文本在不同大模型下的 token 数量。
+- 支持 OpenAI GPT 系列（gpt-3.5、gpt-4、gpt-4o 等）、阿里 Qwen 系列、DeepSeek 系列等常见模型。
+- 支持根据模型不同的上下文长度限制给出超限提醒，并预估费用（若有价格信息）。
+
+## 2. 核心需求与功能列表
+1. **文本输入**：支持多语言长文本粘贴，实时统计字符数、行数。
+2. **模型选择**：
+   - 预置模型列表（按厂商分组），提供搜索/收藏功能。
+   - 显示模型上下文长度、token 价格等元信息。
+3. **Token 计算**：
+   - 根据所选模型对应的分词器计算 token 数。
+   - 对于不在列表内的模型允许用户选择相近的分词规则或上传自定义 vocab。
+4. **结果展示**：
+   - 展示 token 数、已用上下文百分比、估算费用。
+   - 若超出上下文长度，给出拆分建议或提示。
+5. **历史记录与导出**：允许用户保存、导出计算结果。
+6. **开发者模式**：提供 API，支持第三方调用。
+
+## 3. Tokenizer 设计
+| 模型系列 | 分词器方案 | 说明 |
+| --- | --- | --- |
+| GPT 系列 | 使用 [tiktoken](https://github.com/openai/tiktoken) 或 OpenAI 提供的官方编码器。 | 需要预先下载模型对应的 encoding（如 `cl100k_base` 等）。 |
+| DeepSeek 系列 | 使用官方开源的 BPE vocab（可通过 `sentencepiece` 或 `tokenizers` 加载）。 | DeepSeek 官方仓库提供 `tokenizer.model`，可用 `sentencepiece` 解码。 |
+| Qwen 系列 | 使用阿里提供的 tiktoken 兼容版或开源的 `tiktoken_qwen`。 | 需根据模型版本选择对应词表。 |
+| 自定义模型 | 支持上传 BPE/ sentencepiece 词表，使用 HuggingFace `tokenizers` 动态加载。 | 允许用户选择分词模式（BPE、Unigram、WordPiece 等）。 |
+
+> **实现建议**：将 tokenizer 抽象为统一接口 `TokenizerAdapter`，封装 `encode(text) -> tokens` 与 `decode(tokens)`。
+
+## 4. 系统架构
+```
+┌──────────────────────────────────────────────────────┐
+│                      前端 Web                        │
+│ ┌─────────────┐ ┌─────────────┐ ┌──────────────────┐ │
+│ │ 文本输入区   │ │ 模型选择面板 │ │ 结果展示/历史区    │ │
+│ └─────────────┘ └─────────────┘ └──────────────────┘ │
+└────────────┬────────────────────────────────────────┘
+             │HTTPS/REST + WebSocket (用于实时反馈)
+┌────────────┴────────────────────────────────────────┐
+│                      后端服务                        │
+│ ┌──────────────────────────────────────────────────┐ │
+│ │ Tokenizer Service                                │ │
+│ │  - 统一适配层                                     │ │
+│ │  - 模型元信息缓存/加载                             │ │
+│ ├──────────────────────────────────────────────────┤ │
+│ │ Metadata Service                                  │ │
+│ │  - 模型配置（上下文长度、价格）                    │ │
+│ │  - 更新任务（定时同步官网/开源项目数据）           │ │
+│ ├──────────────────────────────────────────────────┤ │
+│ │ API Gateway / GraphQL 层                          │ │
+│ └──────────────────────────────────────────────────┘ │
+│               ↕                                    ↕  │
+│         Redis/Memcached (缓存)      PostgreSQL/SQLite │
+└──────────────────────────────────────────────────────┘
+```
+
+## 5. 前端设计要点
+- **技术栈**：React + TypeScript + TailwindCSS，或使用 Vue + Element Plus。
+- **实时反馈**：文本输入触发 debounced 请求（例如 300ms）到后端获取 token 数；对于短文本可直接在前端本地计算（加载 wasm/tokenizer）。
+- **模型列表**：支持分组折叠、搜索、收藏、最近使用。
+- **辅助功能**：
+  - 一键复制 token 结果。
+  - 粘贴 Markdown/代码自动保留格式。
+  - 支持黑暗模式。
+
+## 6. 后端设计要点
+- **技术栈**：Python（FastAPI）或 Node.js（NestJS）。
+- **Tokenizer Adapter**：
+  - 抽象类定义 `name`, `max_context`, `calculate_tokens(text)`。
+  - 针对不同模型加载对应词表，考虑热加载与缓存。
+- **性能优化**：
+  - 长文本使用异步任务，返回任务 ID，完成后推送结果。
+  - 常用模型词表缓存到内存，减少磁盘读取。
+- **可扩展性**：
+  - Model Metadata 存储配置项（上下文长度、默认价格、发布信息等）。
+  - 新增模型只需更新配置与词表即可。
+
+## 7. Token 计算流程
+1. 用户粘贴文本并选择模型。
+2. 前端发送 `POST /api/tokenize`，包含文本、模型标识。
+3. 后端根据模型标识加载对应 Tokenizer Adapter。
+4. 调用 `adapter.encode(text)` 返回 token 序列。
+5. 计算 token 数、上下文占比、费用估算，响应给前端。
+6. 记录请求日志（匿名化）用于使用统计。
+
+## 8. 扩展与增值功能
+- **批量模式**：上传文件（txt、md、docx），按段落或文件进行统计。
+- **Prompt 模版库**：结合常见 Prompt 模板计算 token 使用量。
+- **团队协作**：成员共享历史记录、设置统一计费标准。
+- **浏览器插件/VSCode 插件**：直接在编辑器中获取 token 数。
+
+## 9. 安全与隐私
+- 对用户粘贴文本进行本地加密传输，后端默认不持久化原始文本。
+- 提供本地部署模式，确保敏感数据不出内网。
+
+## 10. 部署方案
+- 使用 Docker Compose 部署（web、api、redis、db）。
+- 支持云服务（Vercel/Netlify + Render/Fly.io）或企业内网 Kubernetes。
+
+## 11. 迭代路线图
+1. **MVP**：支持 GPT/DeepSeek/Qwen 三大系列核心模型的 token 计算，前端实时展示。
+2. **增强版**：加入费用估算、历史记录、批量导入。
+3. **专业版**：提供团队协作、API 接口、插件生态。
+
+---
+如需进一步的技术细节或原型设计，可以在此基础上继续细化。
+
+## 12. 代码实现概述
+- 使用纯标准库实现，可在无第三方依赖的环境运行。
+- 核心模块划分：
+  - `app/config.py`：加载模型与分词器配置（默认 `app/resources/model_registry.json`）。
+  - `app/tokenizers/`：实现可配置的正则分词器与字节分词器，并提供注册表工厂。
+  - `app/services/token_service.py`：聚合模型元数据与分词器，对外提供计算接口。
+  - `app/server.py`：基于 `http.server` 提供 `/models` 与 `/tokenize` HTTP API。
+  - `app/__main__.py`：命令行入口，支持列出模型、文件/文本计数以及启动服务。
+- 默认内置 GPT、DeepSeek、Qwen 三个系列的模型示例，便于快速扩展：
+  - GPT 使用折叠空白的正则分词方案。
+  - DeepSeek 在计算中保留空白（折叠为 `<ws>`）。
+  - Qwen 保留原始空白差异，便于更精细的统计。
+
+## 13. 使用方式
+### 13.1 命令行
+```bash
+python -m app models               # 查看支持的模型列表
+python -m app count --model gpt-4o-mini --text "测试文本"
+python -m app count --model qwen-2-7b --file sample.txt
+```
+- 可通过 `--registry /path/to/model_registry.json` 指定自定义配置。
+
+### 13.2 HTTP 服务
+```bash
+python -m app serve --host 0.0.0.0 --port 8080
+```
+- `GET /models`：返回模型列表与元信息。
+- `POST /tokenize`：请求体 `{ "model": "gpt-4o-mini", "text": "..." }`，返回 token 数、上下文占用、价格估算等。
+
+### 13.3 扩展模型
+1. 在 `app/resources/model_registry.json` 中新增模型配置，或通过 `--registry` 传入外部 JSON 文件。
+2. 配置项中的 `tokenizer.type` 当前支持 `regex`（可配置正则规则）与 `byte`（按 UTF-8 字节计数）。
+3. 若后续需要接入真实官方 tokenizer，可在 `app/tokenizers` 中新增适配器并在注册表注册即可复用现有服务逻辑。
+
+## 14. 测试
+- 使用 `unittest` 验证分词器、服务层及 CLI 行为。
+- 运行方法：
+```bash
+python -m unittest discover -s tests
+```
